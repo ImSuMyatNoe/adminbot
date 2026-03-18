@@ -4,15 +4,15 @@
 > a **Routing Agent + Retrieval-Augmented Generation (RAG)** pipeline,
 > built with Azure OpenAI GPT and Streamlit.
 
-**Author:** Su Myat Noe    
+**Author:** Su Myat Noe  
 **Status:** Active development · v1.0
 
 ---
 
 ## Motivation
 
-Administrative staff at research institutes handle a high volume of repetitive
-questions from researchers every day — about business trips, expense reimbursement,
+Administrative staff at research institutes and offices handle a high volume of
+repetitive questions every day — about business trips, expense reimbursement,
 leave applications, IT access, and facilities. These questions are time-consuming
 to answer manually, yet the answers are well-documented in internal FAQs.
 
@@ -22,9 +22,7 @@ This project explores whether a practical LLM pipeline can:
 - Generate a **grounded, accurate answer** — not a hallucination
 
 Beyond automation, this project serves as a testbed for evaluating how well
-current LLMs handle **real-world institutional FAQ tasks** in a
-research-institute setting — directly connected to ongoing work on
-multilingual LLM evaluation at LLMC.
+current LLMs handle **real-world institutional FAQ tasks**.
 
 ---
 
@@ -33,17 +31,17 @@ multilingual LLM evaluation at LLMC.
 1. **Build a working Agent + RAG pipeline** using Azure OpenAI function calling
    for intent routing and category-based document retrieval
 
-2. **Demonstrate practical LLM deployment** — from local development on a GPU
-   server (SMN-GPU-2) to a browser-accessible Streamlit interface
+2. **Demonstrate practical LLM deployment** — from local development on a remote
+   GPU server to a browser-accessible Streamlit interface
 
 3. **Create an extensible FAQ knowledge base** that non-technical staff
    (e.g. admin team, translators) can easily edit without touching code
 
 4. **Establish a foundation** for future multilingual support (Japanese) and
-   deployment as a Slack bot on the institute's internal LLM-JP channel
+   deployment as a Slack bot
 
 5. **Showcase the project publicly** as a portfolio piece demonstrating
-   end-to-end LLM application development alongside research work
+   end-to-end LLM application development
 
 ---
 
@@ -104,7 +102,7 @@ flowchart TD
 
 ```bash
 # 1. Clone
-git clone https://github.com/YOUR_USERNAME/adminbot.git
+git clone https://github.com/ImSuMyatNoe/adminbot.git
 cd adminbot
 
 # 2. Install
@@ -114,10 +112,10 @@ pip install -r requirements.txt
 cp .env.example .env
 # Open .env and fill in your Azure details
 
-# 4. Run
+# 4. Run locally
 streamlit run app.py
 
-# On a remote server (e.g. MDX / SMN-GPU-2):
+# On a remote server:
 streamlit run app.py --server.port 8501 --server.address 0.0.0.0
 ```
 
@@ -150,19 +148,19 @@ adminbot/
 | Area | Current limitation | Planned improvement |
 |------|--------------------|---------------------|
 | **Knowledge base** | Flat text in a Python file | Move to a vector database (FAISS) for larger document sets |
-| **Language** | English only | Add Japanese Q&A — Kobayashi-sensei translation in progress |
+| **Language** | English only | Add Japanese Q&A (bilingual support) |
 | **Retrieval** | Category-level retrieval (one doc per category) | Chunk-level retrieval for more precise answers |
 | **Escalation** | Falls back to generic admin contact | Log unanswered questions → build a real escalation queue |
-| **Evaluation** | No automated eval yet | Add answer quality metrics; connect to MSTS evaluation framework |
-| **Model** | Azure GPT (cloud) | Swap to locally-hosted LLM-JP via vLLM for privacy + cost |
-| **Interface** | Streamlit web app | Deploy as Slack bot (see roadmap below) |
+| **Evaluation** | No automated eval yet | Add answer quality metrics |
+| **Model** | Azure GPT (cloud) | Swap to a locally-hosted model for privacy and cost |
+| **Interface** | Streamlit web app | Deploy as Slack bot (see roadmap) |
 
 ---
 
 ## Roadmap
 
 - [ ] Add Japanese FAQ content (bilingual support)
-- [ ] Deploy as **Slack bot** on institute internal channel
+- [ ] Deploy as **Slack bot** on internal workspace channel
 - [ ] Add escalation logging for unanswered questions
 - [ ] Add chunk-level FAISS retrieval for larger FAQ sets
 - [ ] Evaluate answer quality against a ground-truth FAQ dataset
@@ -171,9 +169,8 @@ adminbot/
 
 ## Why Slack? (Future Goal)
 
-The end goal is to deploy AdminGenie directly inside the institute's
-internal Slack workspace — so staff
-can ask admin questions without leaving their existing workflow.
+The end goal is to deploy AdminGenie directly inside an office Slack workspace —
+so staff can ask admin questions without leaving their existing workflow.
 
 When a question cannot be answered, the bot will automatically
 **escalate to the admin team** via a dedicated Slack channel,
