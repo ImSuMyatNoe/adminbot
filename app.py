@@ -25,6 +25,9 @@ client = get_client()
 DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o")
 
 # ── STEP 1: AGENT ─────────────────────────────────────────────────────────────
+# Routes the LATEST question to a category.
+# We only pass the current question here — routing doesn't need history.
+
 ROUTING_TOOLS = [
     {
         "type": "function",
@@ -72,43 +75,68 @@ def agent_route(question):
     tool_call = response.choices[0].message.tool_calls[0]
     return json.loads(tool_call.function.arguments)
 
+
 # ── STEP 2: RAG ───────────────────────────────────────────────────────────────
 def retrieve_context(category):
     if category in CATEGORIES:
         return CATEGORIES[category]["info"]
     return None
 
-# ── STEP 3: GENERATE ──────────────────────────────────────────────────────────
-def generate_answer(question, category, context):
+
+# ── STEP 3: GENERATE with MEMORY ─────────────────────────────────────────────
+# This is where multi-turn happens.
+# We pass the FULL conversation history so GPT remembers everything said before.
+
+def generate_answer(question, category, context, chat_history):
+    """
+    chat_history: list of {"role": "user"/"assistant", "content": "..."}
+    We pass the full history so GPT understands follow-up questions.
+    """
     if context:
         system_prompt = (
             "You are AdminGenie, a friendly and helpful office admin assistant. "
             "Answer using ONLY the FAQ below. Be concise and practical. "
+            "You remember the full conversation — use it to understand follow-up questions. "
+            "For example, if the user already asked about a business trip and now asks "
+            "'what about expenses?' — you know they mean business trip expenses. "
             "If the FAQ does not cover the question, say so and suggest contacting the admin office."
             f"\n\n--- FAQ: {category} ---\n{context}"
         )
     else:
         system_prompt = (
             "You are AdminGenie, a friendly office admin assistant. "
+            "You remember the full conversation — use it to understand follow-up questions. "
             "You have no FAQ information for this question. "
             "Politely say so and suggest contacting the admin office."
         )
+
+    # Build messages: system + full history + current question
+    messages = [{"role": "system", "content": system_prompt}]
+
+    # Add conversation history (everything said before this question)
+    for msg in chat_history:
+        messages.append({
+            "role": msg["role"],
+            "content": msg["content"]
+        })
+
+    # Add the current question
+    messages.append({"role": "user", "content": question})
+
     response = client.chat.completions.create(
         model=DEPLOYMENT,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user",   "content": question},
-        ],
+        messages=messages,
         max_completion_tokens=500,
     )
     return response.choices[0].message.content.strip()
 
+
 # ── FULL PIPELINE ─────────────────────────────────────────────────────────────
-def run_pipeline(question):
+def run_pipeline(question, chat_history):
     routing  = agent_route(question)
     category = routing["category"] if routing["category"] != "None" else None
     context  = retrieve_context(category) if category else None
-    answer   = generate_answer(question, category, context) if context else FALLBACK_MESSAGE
+    answer   = generate_answer(question, category, context, chat_history) if context else FALLBACK_MESSAGE
     return {
         "answer":     answer,
         "category":   category,
@@ -116,11 +144,12 @@ def run_pipeline(question):
         "reasoning":  routing.get("reasoning", ""),
     }
 
+
 # ── UI ────────────────────────────────────────────────────────────────────────
 st.title("🧞 AdminGenie")
 st.caption("Your office admin assistant — ask me anything about travel, expenses, leave, IT, or facilities.")
 
-# Quick topic buttons — short labels so they fit on one line
+# Quick topic buttons
 BUTTON_LABELS = {
     "Travel & Business Trip":      "✈️ Travel",
     "Reimbursement & Expenses":    "💴 Expenses",
@@ -145,24 +174,42 @@ if "browse_category" in st.session_state:
 
 st.divider()
 
+# ── Chat history stored in session ───────────────────────────────────────────
+# session_state["messages"] stores everything shown in the UI
+# We pass only role+content to GPT (not the meta/category info)
+
 if "messages" not in st.session_state:
     st.session_state["messages"] = []
 
+# Display all past messages
 for msg in st.session_state["messages"]:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
         if msg.get("meta"):
             m = msg["meta"]
-            st.caption(f"📂 **{m['category']}** · confidence: {m['confidence']} · _{m['reasoning']}_")
+            st.caption(
+                f"📂 **{m['category']}** · confidence: {m['confidence']} · _{m['reasoning']}_"
+            )
 
+# ── Chat input ────────────────────────────────────────────────────────────────
 if question := st.chat_input("Ask your admin question here..."):
+
+    # Show user message
     st.session_state["messages"].append({"role": "user", "content": question})
     with st.chat_message("user"):
         st.markdown(question)
 
+    # Build history to pass to GPT (only role + content, no meta)
+    # Exclude the message we just added (it's the current question)
+    history_for_gpt = [
+        {"role": m["role"], "content": m["content"]}
+        for m in st.session_state["messages"][:-1]  # everything except current question
+    ]
+
+    # Run pipeline with full history
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
-            result = run_pipeline(question)
+            result = run_pipeline(question, history_for_gpt)
         st.markdown(result["answer"])
         if result["category"]:
             st.caption(
@@ -173,6 +220,7 @@ if question := st.chat_input("Ask your admin question here..."):
         else:
             st.caption("📂 No category matched → please contact the admin office")
 
+    # Save assistant reply to history
     st.session_state["messages"].append({
         "role":    "assistant",
         "content": result["answer"],
@@ -183,6 +231,7 @@ if question := st.chat_input("Ask your admin question here..."):
         },
     })
 
+# ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("### 🧞 AdminGenie")
     st.markdown("Your office admin assistant.")
@@ -191,6 +240,7 @@ with st.sidebar:
     st.markdown("1. 🤖 Agent routes your question")
     st.markdown("2. 📄 Retrieves relevant FAQ")
     st.markdown("3. ✍️ Generates a grounded answer")
+    st.markdown("4. 🧠 Remembers the full conversation")
     st.divider()
     st.markdown("**Topics I can help with:**")
     for cat in CATEGORIES.keys():
@@ -200,7 +250,13 @@ with st.sidebar:
     st.markdown("📧 admin@office.com")
     st.markdown("📞 ext. 1100")
     st.divider()
+
+    # Show how many messages are in memory
+    msg_count = len(st.session_state.get("messages", []))
+    if msg_count > 0:
+        st.caption(f"🧠 {msg_count} messages in memory this session")
+
     if st.button("🗑️ Clear chat"):
         st.session_state["messages"] = []
         st.rerun()
-    st.caption("AdminGenie v1.0 · 2025")
+    st.caption("AdminGenie v1.1 · 2025")
