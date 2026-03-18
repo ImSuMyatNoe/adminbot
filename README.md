@@ -182,3 +182,10 @@ creating a smooth human-in-the-loop handoff.
 
 **Su Myat Noe**  
 [imsumyatnoe.github.io](https://imsumyatnoe.github.io)
+
+---
+
+## License
+
+This project is licensed under the [MIT License](LICENSE) — feel free to use,
+modify, and share with attribution.
